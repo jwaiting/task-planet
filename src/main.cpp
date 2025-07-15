@@ -1,19 +1,29 @@
 #include "crow_all.h"
+#include "models/task.hpp"
+#include "routes/task_routes.hpp"
+#include "routes/suggestion_routes.hpp"
+#include "routes/roulette_routes.hpp"
 
-int main()
-{
+int main() {
     crow::SimpleApp app;
 
-    CROW_ROUTE(app, "/")([](){
-        return "Hello, Task Planet!";
-    });
+    // 初始任務池
+    std::vector<Task> taskPool = {
+        {"散步 15 分鐘", "放鬆", 15},
+        {"閱讀 20 分鐘", "靜心", 20},
+        {"整理房間", "積極", 30},
+        {"泡杯咖啡", "放鬆", 10},
+        {"寫下三件感恩小事", "靜心", 10}
+    };
 
-    CROW_ROUTE(app, "/api/today")([](){
-        crow::json::wvalue x;
-        x["tasks"] = crow::json::wvalue::list({"task1", "task2"});
-        return x;
+    // 註冊路由
+    registerTaskRoutes(app, taskPool);
+    registerSuggestionRoutes(app, taskPool);
+    registerRouletteRoutes(app, taskPool);
+
+    CROW_ROUTE(app, "/")([]() {
+        return "<h1>Mini Task List Alliance 啟動 🌱</h1>";
     });
 
     app.port(18080).multithreaded().run();
-    return 0;
 }
