@@ -1,0 +1,31 @@
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 85
+AllowShortIfStatementsOnASingleLine: false
+BreakBeforeBraces: Custom
+
+BraceWrapping:
+  AfterClass:           true
+  AfterControlStatement: false      # 這裡改成 false，if/for/while { 不換行
+  AfterEnum:            true
+  AfterFunction:        false
+  AfterNamespace:       false
+  AfterStruct:          true
+  BeforeCatch:          true
+  BeforeElse:           false      # else { 不換行
+  IndentBraces:         false
+
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+SpacesBeforeTrailingComments: 1
+AlignAfterOpenBracket: Align
+
+BinPackParameters: false
+BinPackArguments: false
+AllowAllParametersOfDeclarationOnNextLine: true
+
+NamespaceIndentation: All
+IndentCaseLabels: true
+
+SortIncludes: false
+IncludeBlocks: Preserve

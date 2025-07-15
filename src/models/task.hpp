@@ -1,8 +1,9 @@
 #pragma once
 #include <string>
 
-struct Task {
+struct Task
+{
     std::string description;
     std::string moodTag;
-    int minTime;
+    int         minTime;
 };
