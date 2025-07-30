@@ -1,4 +1,5 @@
 #include "crow_all.h"
+#include "config/config.hpp"
 #include "models/task.hpp"
 #include "utils/db_task.hpp"
 #include "routes/roulette_routes.hpp"
@@ -7,8 +8,17 @@
 
 int main() {
     crow::SimpleApp app;
+    std::string     connStr;
+    try {
+        Config::loadEnv();
+        connStr = Config::getDbConnStr();
+        std::cout << "DB Connection: " << connStr << std::endl;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "[FATAL] " << e.what() << std::endl;
+        return 1;
+    }
 
-    std::string       connStr  = "dbname=taskplanet user=taskuser password=yourpass";
     std::vector<Task> taskPool = loadTasksFromDB(connStr);
     // 初始任務池
 

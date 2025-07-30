@@ -16,11 +16,15 @@ link_directories(/usr/local/lib)
 find_package(nlohmann_json REQUIRED)
 
 # source files
+file(GLOB CONFIG src/config/*.hpp)
 file(GLOB ROUTES src/routes/*.hpp)
 file(GLOB MODELS src/models/*.hpp)
 file(GLOB UTILS src/utils/*.hpp)
 
-add_executable(task_planet src/main.cpp ${ROUTES} ${MODELS} ${UTILS})
+add_executable(task_planet 
+    src/main.cpp 
+    ${CONFIG} ${ROUTES} ${MODELS} ${UTILS}
+)
 
 target_link_libraries(task_planet
   pqxx
