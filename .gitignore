@@ -40,3 +40,22 @@
 # debug information files
 *.dwo
 build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# PostgreSQL
+*.pgsql
+*.psql
+*.db
+*.dump
+
+# Prisma
+prisma/migrations/
+prisma/dev.db
+prisma/*.sqlite
+
+# Node.js
+node_modules/

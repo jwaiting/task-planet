@@ -1,8 +1,8 @@
 #pragma once
 #include <random>
-
 #include "../models/task.hpp"
 #include "crow_all.h"
+#include "../utils/task_json.hpp"
 
 void registerRouletteRoutes(crow::SimpleApp& app, std::vector<Task>& taskPool) {
     CROW_ROUTE(app, "/roulette")([&taskPool]() {
@@ -13,11 +13,6 @@ void registerRouletteRoutes(crow::SimpleApp& app, std::vector<Task>& taskPool) {
         std::uniform_int_distribution<> dist(0, taskPool.size() - 1);
         const Task&                     task = taskPool[dist(rng)];
 
-        crow::json::wvalue result;
-        result["description"] = task.description;
-        result["mood"]        = task.moodTag;
-        result["minTime"]     = task.minTime;
-
-        return crow::response(result);
+        return crow::response(json(task).dump());
     });
 }
