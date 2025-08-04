@@ -1,11 +1,15 @@
 #pragma once
 #include <random>
+#include <pqxx/pqxx>
 #include "../models/task.hpp"
+#include "../utils/db_task.hpp"
 #include "crow_all.h"
 #include "../utils/task_json.hpp"
 
-void registerRouletteRoutes(crow::SimpleApp& app, std::vector<Task>& taskPool) {
-    CROW_ROUTE(app, "/roulette")([&taskPool]() {
+void registerRouletteRoutes(crow::SimpleApp& app, pqxx::connection& conn) {
+    CROW_ROUTE(app, "/roulette")([&conn]() {
+        auto taskPool = loadTasksFromDB(conn);
+
         if (taskPool.empty())
             return crow::response(404, "No tasks available");
 

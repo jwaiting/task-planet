@@ -5,14 +5,14 @@
 #include <nlohmann/json.hpp>
 #include "../models/task.hpp"
 
-inline std::vector<Task> loadTasksFromDB(const std::string& connStr) {
+// 讀取 Task 資料
+inline std::vector<Task> loadTasksFromDB(pqxx::connection& conn) {
     std::vector<Task> tasks;
 
     try {
-        pqxx::connection conn(connStr);
-        pqxx::work       txn(conn);
+        pqxx::work txn(conn);
 
-        // 使用別名，全部轉成小寫
+        // 因為沒有參數，所以直接用 exec()
         auto result = txn.exec(R"(
             SELECT 
                 "id" AS id,
@@ -34,7 +34,7 @@ inline std::vector<Task> loadTasksFromDB(const std::string& connStr) {
             t.suggestedTime = row["suggestedtime"].as<int>();
             t.createdAt     = row["createdat"].as<std::string>();
 
-            tasks.push_back(t);
+            tasks.push_back(std::move(t));
         }
 
         txn.commit();
@@ -44,4 +44,30 @@ inline std::vector<Task> loadTasksFromDB(const std::string& connStr) {
     }
 
     return tasks;
+}
+
+// 新增任務到 Task table
+inline void insertTaskToDB(pqxx::connection&               conn,
+                           const std::string&              description,
+                           const std::vector<std::string>& mood,
+                           int                             suggestedTime) {
+    try {
+        pqxx::work txn(conn);
+
+        nlohmann::json moodJson = mood;
+
+        txn.exec_params(
+            R"(
+        INSERT INTO "Task" ("description", "mood", "suggestedTime")
+        VALUES ($1, $2, $3)
+    )",
+            description,
+            moodJson.dump(),
+            suggestedTime);
+
+        txn.commit();
+    }
+    catch (const std::exception& e) {
+        std::cerr << "[insertTaskToDB] Error: " << e.what() << std::endl;
+    }
 }

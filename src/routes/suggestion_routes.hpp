@@ -1,17 +1,19 @@
 #pragma once
 #include <vector>
 #include <nlohmann/json.hpp>
+#include <pqxx/pqxx>
 
 #include "../models/task.hpp"
 #include "../utils/task_selector.hpp"
-#include "../utils/task_json.hpp" // ✅ 若有 to_json(Task)
+#include "../utils/task_json.hpp"
+#include "../utils/db_task.hpp" // ✅ 改用 DB 取任務
 
 #include "crow_all.h"
 using nlohmann::json;
 
-void registerSuggestionRoutes(crow::SimpleApp& app, std::vector<Task>& taskPool) {
+void registerSuggestionRoutes(crow::SimpleApp& app, pqxx::connection& conn) {
     CROW_ROUTE(app, "/suggestions")
-        .methods("POST"_method)([&taskPool](const crow::request& req) {
+        .methods("POST"_method)([&conn](const crow::request& req) {
             json body;
             try {
                 body = json::parse(req.body);
@@ -27,6 +29,10 @@ void registerSuggestionRoutes(crow::SimpleApp& app, std::vector<Task>& taskPool)
             std::string mood = body["mood"];
             int         time = body["time"];
 
+            // 從 DB 重新讀取最新的任務
+            auto taskPool = loadTasksFromDB(conn);
+
+            // 選擇符合 mood 和 time 的任務
             auto suggestions = selectTasks(taskPool, mood, time);
 
             json result = json::array();
