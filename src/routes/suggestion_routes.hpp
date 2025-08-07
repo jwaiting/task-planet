@@ -12,7 +12,7 @@
 using nlohmann::json;
 
 void registerSuggestionRoutes(crow::SimpleApp& app, pqxx::connection& conn) {
-    CROW_ROUTE(app, "/suggestions")
+    CROW_ROUTE(app, "/api/suggestions")
         .methods("POST"_method)([&conn](const crow::request& req) {
             json body;
             try {

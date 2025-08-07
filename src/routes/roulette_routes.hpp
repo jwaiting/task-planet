@@ -7,7 +7,7 @@
 #include "../utils/task_json.hpp"
 
 void registerRouletteRoutes(crow::SimpleApp& app, pqxx::connection& conn) {
-    CROW_ROUTE(app, "/roulette")([&conn]() {
+    CROW_ROUTE(app, "/api/roulette")([&conn]() {
         auto taskPool = loadTasksFromDB(conn);
 
         if (taskPool.empty())
