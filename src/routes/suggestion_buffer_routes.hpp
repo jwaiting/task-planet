@@ -23,6 +23,70 @@ inline void registerSuggestionBufferRoutes(crow::SimpleApp&  app,
         return crow::response(res.dump());
     });
 
+    // 依 mood 和時間篩選 buffer 任務
+    CROW_ROUTE(app, "/api/suggestions/buffer/filter")
+        .methods("GET"_method)([&conn](const crow::request& req) {
+            std::string moodParam =
+                req.url_params.get("mood") ? req.url_params.get("mood") : "";
+            int timeParam = req.url_params.get("time")
+                                ? std::stoi(req.url_params.get("time"))
+                                : 9999;
+
+            pqxx::work txn(conn);
+
+            auto result = txn.exec_params(
+                R"SQL(
+            SELECT id, description, mood, "suggestedTime" as suggestedtime, votes
+            FROM "TaskSuggestionBuffer"
+            WHERE $1 = ANY (SELECT jsonb_array_elements_text(mood::jsonb))
+              AND "suggestedTime" <= $2
+            ORDER BY votes DESC
+            LIMIT 10
+        )SQL",
+                moodParam,
+                timeParam);
+
+            nlohmann::json out = nlohmann::json::array();
+            for (const auto& row : result) {
+                out.push_back({{"id", row["id"].as<int>()},
+                               {"description", row["description"].c_str()},
+                               {"mood", nlohmann::json::parse(row["mood"].c_str())},
+                               {"minTime", row["suggestedTime"].as<int>()},
+                               {"voteCount", row["votes"].as<int>()}});
+            }
+
+            return crow::response(out.dump());
+        });
+
+    // 投票
+    CROW_ROUTE(app, "/api/suggestions/buffer/<int>/vote")
+        .methods("POST"_method)([&conn](int id) {
+            try {
+                pqxx::work txn(conn);
+                auto       r = txn.exec_params(
+                    R"SQL(
+                UPDATE "TaskSuggestionBuffer"
+                SET votes = votes + 1
+                WHERE id = $1
+                RETURNING votes
+            )SQL",
+                    id);
+                if (r.affected_rows() == 0) {
+                    txn.commit();
+                    return crow::response(404, "Not found");
+                }
+                int newVotes = r[0]["votes"].as<int>();
+                txn.commit();
+
+                nlohmann::json resp;
+                resp["votes"] = newVotes;
+                return crow::response(resp.dump());
+            }
+            catch (const std::exception& e) {
+                return crow::response(500, std::string("DB error: ") + e.what());
+            }
+        });
+
     // 新增 buffer 任務
     CROW_ROUTE(app, "/api/suggestions/buffer")
         .methods("POST"_method)([&conn](const crow::request& req) {
