@@ -1,17 +1,25 @@
-#!/bin/bash
-set -e  # 有錯誤就中斷
+#!/usr/bin/env bash
+set -euo pipefail
 
-# 1. 建立或清空 build 目錄
-if [ ! -d "build" ]; then
-  mkdir build
-fi
+# 可覆寫：BUILD_DIR, BUILD_TYPE, GENERATOR, RUN_ARGS
+BUILD_DIR="${BUILD_DIR:-build}"
+BUILD_TYPE="${BUILD_TYPE:-Release}"
+GENERATOR="${GENERATOR:-}"   # 例：-G Ninja
 
-cd build
+# 取 CPU 核心數
+get_jobs() {
+  if command -v nproc >/dev/null 2>&1; then
+    nproc
+  elif [[ "$OSTYPE" == "darwin"* ]]; then
+    sysctl -n hw.ncpu
+  else
+    echo 4
+  fi
+}
 
-# 2. 執行 CMake 與 Make
-cmake ..
-make -j$(nproc)
+# 配置 & 編譯
+cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" ${GENERATOR:+-G "$GENERATOR"}
+cmake --build "$BUILD_DIR" -j"$(get_jobs)"
 
-# 3. 回到專案根目錄並執行
-cd ..
-./build/task_planet
+# 執行
+"./$BUILD_DIR/task_planet" ${RUN_ARGS:-}

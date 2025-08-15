@@ -7,26 +7,149 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model Task {
-  id            Int      @id @default(autoincrement())
-  description   String
-  mood          Json
-  suggestedTime Int
-  createdAt     DateTime @default(now())
-}
-
-enum TaskStatus {
+/**
+ * ---------- enums ----------
+ */
+enum SuggestionStatus {
   pending
   approved
   rejected
+  merged
+
+  @@map("suggestion_status")
+}
+
+/**
+ * ---------- core tables ----------
+ */
+model Task {
+  id            Int      @id @default(autoincrement())
+  description   String
+  suggestedTime Int      @map("suggested_time")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @map("updated_at")
+
+  tagWeights TaskTagWeight[]
+  stats      TaskStats?
+
+  suggestionAliases SuggestionAlias[]
+
+  @@map("tasks")
 }
 
 model TaskSuggestionBuffer {
-  id            Int        @id @default(autoincrement())
+  id            Int              @id @default(autoincrement())
   description   String
-  mood          Json
-  suggestedTime Int
-  status        TaskStatus @default(pending)
-  votes         Int        @default(0)
-  createdAt     DateTime   @default(now())
+  suggestedTime Int              @map("suggested_time")
+  status        SuggestionStatus @default(pending)
+  votes         Int              @default(0)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @default(now()) @map("updated_at")
+
+  tags      SuggestionTagWeight[]
+  alias     SuggestionAlias?
+  votesRel  SuggestionVotes[]
+  adoptions SuggestionAdoptions[]
+
+  @@map("task_suggestion_buffer")
+}
+
+/**
+ * ---------- tags & weights ----------
+ */
+model TagDim {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  label     String
+  groupCode String   @map("group_code")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  taskFits TaskTagWeight[]
+  suggFits SuggestionTagWeight[]
+
+  @@map("tag_dim")
+}
+
+model TaskTagWeight {
+  taskId     Int      @map("task_id")
+  tagId      Int      @map("tag_id")
+  baseWeight Float    @default(0.5) @map("base_weight")
+  alpha      Float    @default(1.0)
+  beta       Float    @default(9.0)
+  updatedAt  DateTime @default(now()) @map("updated_at")
+
+  task Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag  TagDim @relation(fields: [tagId], references: [id])
+
+  @@id([taskId, tagId])
+  @@index([tagId])
+  @@map("task_tag_weight")
+}
+
+model SuggestionTagWeight {
+  suggestionId Int      @map("suggestion_id")
+  tagId        Int      @map("tag_id")
+  baseWeight   Float    @default(0.6) @map("base_weight")
+  alpha        Float    @default(1.0)
+  beta         Float    @default(9.0)
+  updatedAt    DateTime @default(now()) @map("updated_at")
+
+  suggestion TaskSuggestionBuffer @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  tag        TagDim               @relation(fields: [tagId], references: [id])
+
+  @@id([suggestionId, tagId])
+  @@index([tagId])
+  @@map("suggestion_tag_weight")
+}
+
+/**
+ * ---------- linking & events ----------
+ */
+model SuggestionAlias {
+  suggestionId Int      @id @map("suggestion_id")
+  taskId       Int      @map("task_id")
+  similarity   Float
+  matchedAt    DateTime @default(now()) @map("matched_at")
+
+  suggestion TaskSuggestionBuffer @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  task       Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("suggestion_alias")
+}
+
+model SuggestionVotes {
+  suggestionId Int      @map("suggestion_id")
+  voteDay      DateTime @db.Date
+  voterToken   String   @map("voter_token")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  suggestion TaskSuggestionBuffer @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+
+  @@id([suggestionId, voteDay, voterToken])
+  @@map("suggestion_votes")
+}
+
+model SuggestionAdoptions {
+  suggestionId Int      @map("suggestion_id")
+  adoptionTs   DateTime @default(now()) @map("adoption_ts")
+
+  suggestion TaskSuggestionBuffer @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+
+  @@id([suggestionId, adoptionTs])
+  @@map("suggestion_adoptions")
+}
+
+model TaskStats {
+  taskId          Int      @id         @map("task_id")
+  votes7d         Int      @default(0) @map("votes_7d")
+  adoptions7d     Int      @default(0) @map("adoptions_7d")
+  scorePopularity Float    @default(0) @map("score_popularity")
+  scoreQuality    Float    @default(0) @map("score_quality")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("task_stats")
 }

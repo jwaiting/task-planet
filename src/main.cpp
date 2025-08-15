@@ -7,7 +7,7 @@
 #include "routes/suggestion_buffer_routes.hpp"
 #include "routes/task_routes.hpp"
 
-int main() {
+int main2() {
     crow::SimpleApp app;
     std::string     connStr;
     try {
