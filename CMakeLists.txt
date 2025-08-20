@@ -20,15 +20,13 @@ target_include_directories(task_planet PRIVATE
   include
   src
   src/app
+  src/config
   src/db
   src/repositories
   src/services
   src/controllers
   src/domain
   src/dto
-  # src/models
-  # src/utils
-  # src/routes
 )
 
 target_link_libraries(task_planet PRIVATE
