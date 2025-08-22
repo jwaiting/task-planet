@@ -11,16 +11,9 @@ OVERRIDE_AUD=""
 usage() {
   cat <<EOF
 Usage: $0 [--env <path>] [--iss <issuer>] [--aud <audience>] [--force-secret]
-
-Options:
-  --env <path>        Path to .env file (default: ./.env)
-  --iss <issuer>      AUTH_ISS value (default: ${ISS_DEFAULT})
-  --aud <audience>    AUTH_AUD value (default: ${AUD_DEFAULT})
-  --force-secret      Regenerate AUTH_JWT_SECRET even if it exists
 EOF
 }
 
-# --- parse args ---
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env) ENV_PATH="$2"; shift 2;;
@@ -32,85 +25,63 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# --- helpers ---
-random_secret() {
-  if ! command -v openssl >/dev/null 2>&1; then
-    echo "ERROR: openssl not found. Please install it first." >&2
-    exit 1
-  fi
-  # 64 bytes, base64; remove newlines just in case
-  openssl rand -base64 64 | tr -d '\n'
-}
+random_secret() { openssl rand -base64 64 | tr -d '\n'; }
 
-# update or insert a KEY=VALUE (preserve other content & comments)
 upsert_env() {
-  local key="$1"
-  local value="$2"
+  local key="$1" value="$2"
   if grep -qE "^[[:space:]]*${key}=" "$ENV_PATH"; then
-    # Replace the whole line (key=existing) with key=new_value
-    # Use sed -i compatible with BSD (macOS)
-    local esc_value
-    esc_value="$(printf '%s' "$value" | sed 's/[\/&]/\\&/g')"
+    local esc_value; esc_value="$(printf '%s' "$value" | sed 's/[\/&]/\\&/g')"
     sed -i '' -E "s|^[[:space:]]*${key}=.*|${key}=${esc_value}|g" "$ENV_PATH"
   else
     printf '%s=%s\n' "$key" "$value" >> "$ENV_PATH"
   fi
 }
 
-# get current value (empty string if missing)
 get_env() {
   local key="$1"
   if [[ -f "$ENV_PATH" ]]; then
-    # take last assignment if multiple
     grep -E "^[[:space:]]*${key}=" "$ENV_PATH" | tail -n 1 | cut -d= -f2- || true
   fi
 }
 
-# --- ensure file exists ---
-if [[ ! -f "$ENV_PATH" ]]; then
-  echo "# Auto-created by init_env.sh" > "$ENV_PATH"
-  echo "" >> "$ENV_PATH"
-fi
+# 在第一個符合 keys_regex 的鍵前插入 header（若尚未存在）
+ensure_section() {
+  local header="$1" keys_regex="$2"
+  grep -qF "$header" "$ENV_PATH" && return 0
+  local line_no
+  line_no="$(grep -nE "^[[:space:]]*(${keys_regex})=" "$ENV_PATH" | head -n1 | cut -d: -f1 || true)"
+  if [[ -n "$line_no" ]]; then
+    local tmp; tmp="$(mktemp)"
+    awk -v ln="$line_no" -v hdr="$header" 'NR==ln{print hdr} {print}' "$ENV_PATH" > "$tmp" && mv "$tmp" "$ENV_PATH"
+  else
+    # 若找不到鍵，才追加到檔尾（避免空標題）
+    echo -e "\n$header" >> "$ENV_PATH"
+  fi
+}
 
-# --- JWT SECRET ---
+[[ -f "$ENV_PATH" ]] || { echo "# Auto-created by init_env.sh" > "$ENV_PATH"; echo "" >> "$ENV_PATH"; }
+
+# ---- 基本鍵 ----
+upsert_env "DB_SCHEMA" "public"
+
+# JWT
 CUR_SECRET="$(get_env AUTH_JWT_SECRET || true)"
 if [[ -z "$CUR_SECRET" || "$FORCE_SECRET" == "true" ]]; then
-  NEW_SECRET="$(random_secret)"
-  upsert_env "AUTH_JWT_SECRET" "$NEW_SECRET"
-  SECRET_MSG="AUTH_JWT_SECRET set $( [[ "$FORCE_SECRET" == "true" ]] && echo '(forced)' || echo '(new)' )"
-else
-  SECRET_MSG="AUTH_JWT_SECRET kept (existing)"
+  upsert_env "AUTH_JWT_SECRET" "$(random_secret)"
 fi
+upsert_env "AUTH_ISS" "${OVERRIDE_ISS:-$(get_env AUTH_ISS || echo "$ISS_DEFAULT")}"
+upsert_env "AUTH_AUD" "${OVERRIDE_AUD:-$(get_env AUTH_AUD || echo "$AUD_DEFAULT")}"
 
-# --- ISS ---
-CUR_ISS="$(get_env AUTH_ISS || true)"
-TARGET_ISS="${OVERRIDE_ISS:-${CUR_ISS:-$ISS_DEFAULT}}"
-upsert_env "AUTH_ISS" "$TARGET_ISS"
+# CORS / Rate Limits（只有不存在才設預設值）
+[[ -n "$(get_env ALLOW_ORIGINS || true)" ]] || upsert_env "ALLOW_ORIGINS" "*"
+[[ -n "$(get_env VOTE_PER_MIN_PER_TOKEN || true)" ]] || upsert_env "VOTE_PER_MIN_PER_TOKEN" "30"
+[[ -n "$(get_env VOTE_PER_MIN_PER_IP || true)" ]] || upsert_env "VOTE_PER_MIN_PER_IP" "120"
+[[ -n "$(get_env SUGGEST_PER_DAY_PER_TOKEN || true)" ]] || upsert_env "SUGGEST_PER_DAY_PER_TOKEN" "20"
+[[ -n "$(get_env GUEST_ISSUE_PER_MIN_PER_IP || true)" ]] || upsert_env "GUEST_ISSUE_PER_MIN_PER_IP" "10"
 
-# --- AUD ---
-CUR_AUD="$(get_env AUTH_AUD || true)"
-TARGET_AUD="${OVERRIDE_AUD:-${CUR_AUD:-$AUD_DEFAULT}}"
-upsert_env "AUTH_AUD" "$TARGET_AUD"
+# ---- 插入區塊標題到正確位置 ----
+ensure_section "# ==== Auth (JWT) ====" "AUTH_(JWT_SECRET|ISS|AUD)"
+ensure_section "# ==== CORS ====" "ALLOW_ORIGINS"
+ensure_section "# ==== Rate Limits ====" "VOTE_PER_MIN_PER_TOKEN|VOTE_PER_MIN_PER_IP|SUGGEST_PER_DAY_PER_TOKEN|GUEST_ISSUE_PER_MIN_PER_IP"
 
-# --- nice section header (ensure present once) ---
-if ! grep -q "^# ==== Auth (JWT) ====" "$ENV_PATH"; then
-  # Insert header before the first AUTH_* line, or append if not found
-  if grep -nE "^[[:space:]]*AUTH_(JWT_SECRET|ISS|AUD)=" "$ENV_PATH" >/dev/null; then
-    line_no="$(grep -nE "^[[:space:]]*AUTH_(JWT_SECRET|ISS|AUD)=" "$ENV_PATH" | head -n1 | cut -d: -f1)"
-    tmp="$(mktemp)"
-    awk -v ln="$line_no" 'NR==ln{print "# ==== Auth (JWT) ===="} {print}' "$ENV_PATH" > "$tmp"
-    mv "$tmp" "$ENV_PATH"
-  else
-    echo -e "\n# ==== Auth (JWT) ====" >> "$ENV_PATH"
-  fi
-fi
-
-echo "✅ Updated $ENV_PATH"
-echo "   - $SECRET_MSG"
-echo "   - AUTH_ISS = $TARGET_ISS"
-echo "   - AUTH_AUD = $TARGET_AUD"
-
-# --- Git ignore hint ---
-if [[ ! -f ".gitignore" ]] || ! grep -qE '(^|/)\.env$' .gitignore; then
-  echo "⚠️  Reminder: add '.env' to .gitignore to avoid committing secrets."
-fi
+echo "✅ $ENV_PATH updated."

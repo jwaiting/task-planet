@@ -1,3 +1,4 @@
+#include "server.hpp"
 #include "crow_all.h"
 #include "../config/config.hpp"
 #include "../db/pool.hpp"
@@ -8,51 +9,29 @@
 #include "../controllers/tags_controller.hpp"
 #include "middleware.hpp"
 
-static bool valid_schema_ident(const std::string& s) {
-    if (s.empty())
-        return false;
-    for (unsigned char ch : s) {
-        if (!(std::isalnum(ch) || ch == '_'))
-            return false;
-    }
-    return true;
-}
-
-int main() {
+int run_server() {
     try {
-        // 讀 .env
         Config::loadEnv();
-
-        // 取 DB 連線字串與 schema
         std::string connStr = Config::getDbConnStr();
         std::string schema  = Config::getDbSchema();
-        if (!valid_schema_ident(schema)) {
-            std::cerr << "[WARN] Invalid DB_SCHEMA: " << schema
-                      << ", fallback to 'public'\n";
-            schema = "public";
-        }
 
-        // 建立連線池：先設 search_path，再註冊 prepared statements
-        DbPool pool(connStr, /*size*/ 8, [schema](pqxx::connection& c) {
+        if (schema.empty())
+            schema = "public";
+
+        DbPool pool(connStr, 8, [schema](pqxx::connection& c) {
             pqxx::work w(c);
             w.exec("SET search_path TO " + schema + ", public");
             w.commit();
             register_prepared(c);
         });
 
-        // Crow App（含 CORS）
         crow::App<Cors> app;
 
-        // 健康檢查
-        CROW_ROUTE(app, "/").methods("GET"_method)(
-            [] { return crow::response{200, "ok"}; });
-        CROW_ROUTE(app, "/ping").methods("GET"_method)([] {
-            return crow::response{200, "pong"};
-        });
+        CROW_ROUTE(app, "/")([] { return crow::response{200, "ok"}; });
+        CROW_ROUTE(app, "/ping")([] { return crow::response{200, "pong"}; });
 
-        // 掛路由
         attach_suggest_routes(app, pool);
-        attach_suggestions_routes(app, pool, /*simThreshold*/ 0.87);
+        attach_suggestions_routes(app, pool, 0.87);
         attach_events_routes(app, pool);
         attach_tags_routes(app, pool);
 

@@ -1,21 +1,40 @@
 cmake_minimum_required(VERSION 3.10)
-project(task_planet CXX)
+project(task_planet LANGUAGES CXX)
 
+# ---- C++ standard ----
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(nlohmann_json REQUIRED)
+# ---- Build type default ----
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# ---- Dependencies ----
 find_package(Threads REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)   # brew 提供的 cmake config
+find_package(OpenSSL QUIET)                   # optional（未來 JWT）
+find_package(jwt-cpp CONFIG QUIET)            # optional（未來 JWT）
 
-# include & link 路徑（保留原本 /usr/local，以適配本機安裝的 pqxx/pq）
-include_directories(/usr/local/include)
-link_directories(/usr/local/lib)
+# ---- Homebrew / local include & lib hints ----
+# 支援 Apple Silicon (/opt/homebrew) 與 Intel (/usr/local)
+foreach(HINT_DIR /opt/homebrew /usr/local)
+  if(EXISTS "${HINT_DIR}/include")
+    include_directories("${HINT_DIR}/include")
+  endif()
+  if(EXISTS "${HINT_DIR}/lib")
+    link_directories("${HINT_DIR}/lib")
+  endif()
+endforeach()
 
+# ---- Sources ----
 add_executable(task_planet
+  src/main.cpp
   src/app/server.cpp
-  # 之後如果把 repo/service 拆成 .cpp 再加這裡
+  # TODO: 未來有新的 .cpp 再加
 )
 
+# ---- Include paths for our code ----
 target_include_directories(task_planet PRIVATE
   include
   src
@@ -29,6 +48,7 @@ target_include_directories(task_planet PRIVATE
   src/dto
 )
 
+# ---- Link libraries ----
 target_link_libraries(task_planet PRIVATE
   pqxx
   pq
@@ -36,15 +56,26 @@ target_link_libraries(task_planet PRIVATE
   Threads::Threads
 )
 
-# 推薦的編譯旗標
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
+if(OpenSSL_FOUND)
+  target_link_libraries(task_planet PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
+if(TARGET jwt-cpp::jwt-cpp)
+  target_link_libraries(task_planet PRIVATE jwt-cpp::jwt-cpp)
+endif()
+
+# ---- Compile options ----
 target_compile_options(task_planet PRIVATE
   -Wall -Wextra -Wpedantic
-  -Wno-c++20-extensions           # ← 壓掉 libpqxx 的 [[unlikely]] 警告
-  # 如果你的環境有把所有警告視為錯誤，也可加：
-  # -Wno-error=c++20-extensions
+  -Wno-c++20-extensions
   -Wno-deprecated-declarations
 )
+
+# ---- Runtime search path (macOS 常見動態庫位置) ----
+if(APPLE)
+  # 讓可執行檔在執行時能在這些路徑找到 dylib
+  set_target_properties(task_planet PROPERTIES
+    BUILD_RPATH "/opt/homebrew/lib;/usr/local/lib"
+    INSTALL_RPATH "/opt/homebrew/lib;/usr/local/lib"
+  )
+endif()

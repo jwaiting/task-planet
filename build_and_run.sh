@@ -21,5 +21,6 @@ get_jobs() {
 cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" ${GENERATOR:+-G "$GENERATOR"}
 cmake --build "$BUILD_DIR" -j"$(get_jobs)"
 
-# 執行
+# 執行（binary 位置為 $BUILD_DIR/task_planet）
+echo "[INFO] starting server: $BUILD_DIR/task_planet"
 "./$BUILD_DIR/task_planet" ${RUN_ARGS:-}
