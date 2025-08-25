@@ -5,6 +5,7 @@
 #include <vector>
 #include <sstream>
 #include <algorithm>
+#include <cctype> // for std::tolower, std::isspace
 #include "dotenv.h"
 
 class Config
@@ -63,6 +64,17 @@ class Config
     }
     static int guestIssuePerMinPerIP() {
         return getInt("GUEST_ISSUE_PER_MIN_PER_IP", 10);
+    }
+
+    static std::string getEnvOrThrow(const char* key) {
+        const char* v = std::getenv(key);
+        if (!v || !*v)
+            throw std::runtime_error(std::string("Missing env: ") + key);
+        return std::string(v);
+    }
+    static std::string getEnvOrDefault(const char* key, const char* defv) {
+        const char* v = std::getenv(key);
+        return (v && *v) ? std::string(v) : std::string(defv);
     }
 
    private:

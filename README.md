@@ -278,7 +278,9 @@ MIT (see `LICENSE`).
 
 ---
 
-## Local development – quick commands
+## Local development
+
+### Quick commands
 
 ```bash
 # Build & run (Release) – defaults are configurable via env vars
@@ -300,6 +302,47 @@ If you don’t have `jq`, use Python to pretty-print:
 ```bash
 curl -sS <url> | python3 -m json.tool
 ```
+
+### Development login route (for testing only)
+
+During development you can enable a temporary `/api/auth/dev-login` endpoint to quickly obtain a JWT token for testing protected routes. **This endpoint must never be enabled in Release builds.**
+
+#### How to Enable
+
+* By default, the dev-login route is **disabled**.
+* To enable it, run the build with:
+
+```bash
+BUILD_TYPE=Debug DEV_LOGIN=1 ./build_and_run.sh
+```
+
+This will:
+
+* Configure CMake with `-DTP_ENABLE_DEV_LOGIN=ON`
+* Define the compile-time flag `TP_ENABLE_DEV_LOGIN`
+* Add `/api/auth/dev-login` to the server routes and JWT whitelist
+
+If you attempt to enable dev-login in a Release build, the build will fail with an error.
+
+#### How to Use
+
+Once the server is running with dev-login enabled:
+
+```bash
+# Request a token
+TOKEN=$(curl -s -X POST http://localhost:18080/api/auth/dev-login | jq -r .token)
+
+# Call a protected endpoint using the token
+curl -i -X POST http://localhost:18080/api/events/adopt \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"suggestionId": 42}'
+```
+
+#### Notes
+
+* Tokens issued by `/api/auth/dev-login` are signed with your `AUTH_JWT_SECRET` and have default role `user`.
+* This route is **only for local testing**; remove it before deploying to production.
 
 ---
 
